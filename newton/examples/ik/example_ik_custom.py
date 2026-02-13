@@ -288,7 +288,7 @@ class Example:
             print("This usually happens when starting from the zero pose (singularity + collision).")
             print("To fix, ensure 'q_start' is set to a neutral, collision-free pose.")
         
-        # Copy the result back to model.joint_q so FK uses the new pose
+        # Copy the result back to model.joint_q so FK uses the new pose. From #1637
         wp.copy(self.model.joint_q, self.joint_q)
 
 
