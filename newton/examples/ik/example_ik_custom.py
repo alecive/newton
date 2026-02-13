@@ -27,6 +27,7 @@
 ###########################################################################
 
 import warp as wp
+import numpy as np
 
 import newton
 import newton.examples
@@ -239,9 +240,18 @@ class Example:
             joint_limit_upper=self.model.joint_limit_upper,
             weight=10.0,
         )
+        
+        # Start from a "home" pose that is collision-free
+        # To reproduce the LBFGS failure (NaNs), uncomment the zero pose below:
+        # q_start = [0.0] * self.model.joint_coord_count  # <--- Causes NaNs due to collision/singularity
+        q_start = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785, 0.0, 0.0] # <--- Fixes the issue
+        
+        # Pad if model has more coords (e.g. finger joints)
+        if len(q_start) < self.model.joint_coord_count:
+            q_start.extend([0.0] * (self.model.joint_coord_count - len(q_start)))
 
-        # Variables the solver will update
-        self.joint_q = wp.array(self.model.joint_q, shape=(1, self.model.joint_coord_count))
+        # Variables the solver will update            
+        self.joint_q = wp.array([q_start], dtype=wp.float32, device=self.model.device)
 
         self.ik_iters = 10
         self.ik_solver = ik.IKSolver(
@@ -270,6 +280,17 @@ class Example:
     def simulate(self):
         self.ik_solver.reset()
         self.ik_solver.step(self.joint_q, self.joint_q, iterations=self.ik_iters)
+        
+        # DEBUG: Check for NaNs to confirm fix/failure
+        jq = self.joint_q.numpy()
+        if np.any(np.isnan(jq)):
+            print("!!! SOLVER FAILED (NaNs) !!!")
+            print("This usually happens when starting from the zero pose (singularity + collision).")
+            print("To fix, ensure 'q_start' is set to a neutral, collision-free pose.")
+        
+        # Copy the result back to model.joint_q so FK uses the new pose
+        wp.copy(self.model.joint_q, self.joint_q)
+
 
     def _push_targets_from_gizmos(self):
         """Read gizmo-updated transforms and push into IK objectives."""
